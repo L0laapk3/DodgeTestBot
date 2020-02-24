@@ -6,66 +6,98 @@ from rlbot.utils.structures.game_data_struct import GameTickPacket
 from util.orientation import Orientation
 from util.vec import Vec3
 
+from rlbot.utils.game_state_util import GameState, BallState, CarState, Physics, Vector3, Rotator, GameInfoState
 
 class MyBot(BaseAgent):
 
-    def initialize_agent(self):
-        # This runs once before the bot starts up
-        self.controller_state = SimpleControllerState()
+	def initialize_agent(self):
+		# This runs once before the bot starts up
+		self.controller_state = SimpleControllerState()
 
-    def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
-        ball_location = Vec3(packet.game_ball.physics.location)
+		self.FPS = 120
+		
+		self.lastTime = 0
+		self.realLastTime = 0
+		self.currentTick = 0
+		self.skippedTicks = 0
+		self.doneTicks = 0
+		self.ticksNowPassed = 0
 
-        my_car = packet.game_cars[self.index]
-        car_location = Vec3(my_car.physics.location)
+		self.stage = 0
+		self.dodgeTick = 0
+		self.lastGround = 0
 
-        car_to_ball = ball_location - car_location
+	def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
 
-        # Find the direction of our car using the Orientation class
-        car_orientation = Orientation(my_car.physics.rotation)
-        car_direction = car_orientation.forward
+		self.packet = packet
+		self.handleTime()
 
-        steer_correction_radians = find_correction(car_direction, car_to_ball)
+		if self.currentTick % 300 == 0:
+			self.stage = -10
+		
+		if self.stage <= 0:
+			car_state = CarState(physics=Physics(location=Vector3(0, 1000, 17), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+			self.stage += 1
+			self.lastGround = self.currentTick
+		else:
+			car_state = CarState(physics=Physics(location=Vector3(0, 1000, 1000), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+			
+			if self.stage == 1:
+				if self.lastGround + 10 > self.currentTick:
+					self.stage = 2
+				print("----------------")
+				print("RESET")
+				print("----------------")
+			elif self.stage == 2:
+				self.controller_state.roll = 1
+				self.controller_state.pitch = 1
+				self.controller_state.jump = True
+				self.dodgeTick = self.currentTick
+				self.stage = 3
+			else:
+				self.controller_state.jump = False
+				if packet.game_cars[self.index].physics.angular_velocity.z == 0:
+					print(f"{self.currentTick - self.dodgeTick}\t{packet.game_cars[self.index].physics.angular_velocity}")
 
-        if steer_correction_radians > 0:
-            # Positive radians in the unit circle is a turn to the left.
-            turn = -1.0  # Negative value for a turn to the left.
-            action_display = "turn left"
-        else:
-            turn = 1.0
-            action_display = "turn right"
+				if self.stage == 3:
+					if self.dodgeTick + 5 < self.currentTick:
+						self.stage = 4
+				elif self.stage == 4:
+					self.controller_state.pitch = -1
+					self.controller_state.roll = 0
+					self.stage = 5
+				else:
+					self.controller_state.pitch = -1
+					self.controller_state.roll = 1
+				
 
-        self.controller_state.throttle = 1.0
-        self.controller_state.steer = turn
+		self.set_game_state(GameState(cars={self.index: car_state}))
 
-        draw_debug(self.renderer, my_car, packet.game_ball, action_display)
-
-        return self.controller_state
-
-
-def find_correction(current: Vec3, ideal: Vec3) -> float:
-    # Finds the angle from current to ideal vector in the xy-plane. Angle will be between -pi and +pi.
-
-    # The in-game axes are left handed, so use -x
-    current_in_radians = math.atan2(current.y, -current.x)
-    ideal_in_radians = math.atan2(ideal.y, -ideal.x)
-
-    diff = ideal_in_radians - current_in_radians
-
-    # Make sure that diff is between -pi and +pi.
-    if abs(diff) > math.pi:
-        if diff < 0:
-            diff += 2 * math.pi
-        else:
-            diff -= 2 * math.pi
-
-    return diff
+		return self.controller_state
 
 
-def draw_debug(renderer, car, ball, action_display):
-    renderer.begin_rendering()
-    # draw a line from the car to the ball
-    renderer.draw_line_3d(car.physics.location, ball.physics.location, renderer.white())
-    # print the action that the bot is taking
-    renderer.draw_string_3d(car.physics.location, 2, 2, action_display, renderer.white())
-    renderer.end_rendering()
+
+
+
+	def handleTime(self):
+		# this is the most conservative possible approach, but it could lead to having a "backlog" of ticks if seconds_elapsed
+		# isnt perfectly accurate.
+		if not self.lastTime:
+			self.lastTime = self.packet.game_info.seconds_elapsed
+		else:
+			if self.realLastTime == self.packet.game_info.seconds_elapsed:
+				return
+
+			if int(self.lastTime) != int(self.packet.game_info.seconds_elapsed):
+				if self.skippedTicks > 0:
+					print(f"did {self.doneTicks}, skipped {self.skippedTicks}")
+				self.skippedTicks = self.doneTicks = 0
+
+			self.ticksNowPassed = round(max(1, (self.packet.game_info.seconds_elapsed - self.lastTime) * self.FPS))
+			self.lastTime = min(self.packet.game_info.seconds_elapsed, self.lastTime + self.ticksNowPassed)
+			self.realLastTime = self.packet.game_info.seconds_elapsed
+			self.currentTick += self.ticksNowPassed
+			if self.ticksNowPassed > 1:
+				#print(f"Skipped {ticksPassed - 1} ticks!")
+				self.skippedTicks += self.ticksNowPassed - 1
+			self.doneTicks += 1
