@@ -36,11 +36,11 @@ class MyBot(BaseAgent):
 			self.stage = -10
 		
 		if self.stage <= 0:
-			car_state = CarState(physics=Physics(location=Vector3(0, 1000, 17), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+			car_state = CarState(physics=Physics(location=Vector3(0, 1000, 17), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 10)))
 			self.stage += 1
 			self.lastGround = self.currentTick
 		else:
-			car_state = CarState(physics=Physics(location=Vector3(0, 1000, 1000), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+			car_state = CarState(physics=Physics(location=Vector3(0, 1000, 1000), rotation=Rotator(pitch=0, roll=0), angular_velocity=Vector3(0, 0, 10)))
 			
 			if self.stage == 1:
 				if self.lastGround + 10 > self.currentTick:
@@ -50,14 +50,13 @@ class MyBot(BaseAgent):
 				print("----------------")
 			elif self.stage == 2:
 				self.controller_state.roll = 1
-				self.controller_state.pitch = 1
+				self.controller_state.pitch = 0
 				self.controller_state.jump = True
 				self.dodgeTick = self.currentTick
 				self.stage = 3
 			else:
 				self.controller_state.jump = False
-				if packet.game_cars[self.index].physics.angular_velocity.z == 0:
-					print(f"{self.currentTick - self.dodgeTick}\t{packet.game_cars[self.index].physics.angular_velocity}")
+				print(f"{self.currentTick - self.dodgeTick}\t{packet.game_cars[self.index].physics.angular_velocity.x}\t{packet.game_cars[self.index].physics.angular_velocity.y}")
 
 				if self.stage == 3:
 					if self.dodgeTick + 5 < self.currentTick:
@@ -67,8 +66,8 @@ class MyBot(BaseAgent):
 				# 	self.controller_state.roll = 0
 				# 	self.stage = 5
 				else:
-					self.controller_state.pitch = 1
-					self.controller_state.roll = 1
+					self.controller_state.pitch = 0
+					self.controller_state.roll = 0
 				
 
 		self.set_game_state(GameState(cars={self.index: car_state}))
