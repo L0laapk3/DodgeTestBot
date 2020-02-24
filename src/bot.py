@@ -62,12 +62,12 @@ class MyBot(BaseAgent):
 				if self.stage == 3:
 					if self.dodgeTick + 5 < self.currentTick:
 						self.stage = 4
-				elif self.stage == 4:
-					self.controller_state.pitch = -1
-					self.controller_state.roll = 0
-					self.stage = 5
+				# elif self.stage == 4:
+				# 	self.controller_state.pitch = -1
+				# 	self.controller_state.roll = 0
+				# 	self.stage = 5
 				else:
-					self.controller_state.pitch = -1
+					self.controller_state.pitch = 1
 					self.controller_state.roll = 1
 				
 
